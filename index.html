@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>SKRC wav → ogg 変換ツール</title>
+
+<!-- PWA設定 -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111111">
+
+<style>
+body {
+  background:#111;
+  color:#eee;
+  font-family:sans-serif;
+  padding:20px;
+}
+button {
+  padding:10px 20px;
+  font-size:16px;
+}
+#log {
+  white-space:pre-line;
+  margin-top:15px;
+}
+</style>
+</head>
+
+<body>
+<h2>SKRC wav → ogg 変換ツール（PWA版）</h2>
+
+<p>（ここに変換機能を後で入れる）</p>
+
+<button onclick="test()">動作テスト</button>
+
+<div id="log"></div>
+
+<script>
+function test(){
+  document.getElementById("log").textContent =
+    "✅ PWAとして正常に動作しています！";
+}
+</script>
+
+<!-- Service Worker 登録 -->
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js");
+}
+</script>
+
+</body>
+</html>
