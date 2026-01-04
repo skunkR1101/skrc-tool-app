@@ -2,39 +2,19 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>SKRC wav → ogg 変換ツール</title>
-
+<title>SKRC wav → ogg</title>
 <style>
-body {
-  background:#111;
-  color:#eee;
-  font-family:sans-serif;
-  padding:30px;
-}
-h2 { margin-bottom:10px; }
-input, button {
-  margin-top:10px;
-  font-size:16px;
-}
-button {
-  padding:8px 20px;
-}
-#log {
-  margin-top:20px;
-  white-space:pre-line;
-  font-size:14px;
-}
+body { background:#111; color:#eee; font-family:sans-serif; padding:20px; }
+button { padding:10px 20px; font-size:16px; }
+#log { margin-top:15px; white-space:pre-line; }
 </style>
 </head>
 
 <body>
-<h2>SKRC wav → ogg 一括変換ツール</h2>
+<h2>🚄 SKRC wav → ogg 変換</h2>
 
-<p>① wavが入ったzipファイルを選択：</p>
-<input type="file" id="zip" accept=".zip">
-
-<br>
-<button onclick="start()">② 変換開始</button>
+<input type="file" id="zip" accept=".zip"><br><br>
+<button onclick="start()">変換開始</button>
 
 <div id="log"></div>
 
@@ -44,30 +24,26 @@ function log(t){
 }
 
 async function start(){
-  document.getElementById("log").textContent = "";
+  log("🚄 サーバーに送信中…（5分ほどかかる場合あり）");
 
   const file = document.getElementById("zip").files[0];
   if(!file){
-    log("❌ zipファイルを選択してください");
+    log("❌ zip未選択");
     return;
   }
 
-  log("🚄 サーバーに送信中…");
-
-  const form = new FormData();
-  form.append("zip", file);
+  const fd = new FormData();
+  fd.append("zip", file);
 
   const res = await fetch("/convert", {
     method: "POST",
-    body: form
+    body: fd
   });
 
   if(!res.ok){
-    log("❌ 変換に失敗しました");
+    log("❌ 変換失敗");
     return;
   }
-
-  log("📦 zip生成完了！ダウンロード開始…");
 
   const blob = await res.blob();
   const a = document.createElement("a");
@@ -75,7 +51,7 @@ async function start(){
   a.download = "SKRC_ogg_converted.zip";
   a.click();
 
-  log("✅ 完了！！");
+  log("✅ 変換完了＆ダウンロード開始！");
 }
 </script>
 </body>
