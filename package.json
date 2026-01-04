@@ -10,6 +10,7 @@
   "multer": "^1.4.4",
   "fluent-ffmpeg": "^2.1.2",
   "ffmpeg-static": "^5.1.0",
-  "unzipper": "^0.10.14"
+  "unzipper": "^0.10.14",
+  "archiver": "^5.3.2"
   }
 }
