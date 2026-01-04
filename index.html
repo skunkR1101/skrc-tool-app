@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>SKRC wav → ogg 手動変換ツール</title>
+<title>SKRC wav → ogg 変換ツール（連打対応最終版）</title>
 
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
@@ -14,57 +14,151 @@ body {
   padding:20px;
 }
 button {
-  padding:10px 20px;
+  padding:12px 20px;
   font-size:16px;
-  margin-top:10px;
+}
+button:disabled {
+  opacity:0.5;
 }
 #log {
   white-space:pre-line;
   margin-top:15px;
   font-size:14px;
 }
-.progress {
+#status {
   margin-top:10px;
+  font-size:15px;
 }
 </style>
 </head>
 
 <body>
-<h2>SKRC wav → ogg 連打変換ツール</h2>
+<h2>🚄 SKRC wav → ogg 変換ツール</h2>
 
+<p>① wav入りzipを選択</p>
 <input type="file" id="zip" accept=".zip"><br><br>
-<button onclick="loadZip()">zip読み込み</button><br><br>
 
-<button id="convertBtn" onclick="convertNext()" disabled>
-▶ 次を変換
-</button>
+<p>② 変換（1回＝1ファイル / 長押し＝自動）</p>
+<button id="convertBtn">▶ 変換する</button>
 
-<div class="progress" id="progress"></div>
+<div id="status"></div>
 <div id="log"></div>
 
 <script>
-let wavList = [];
-let index = 0;
-let outZip = new JSZip();
-let audioCtx = null;
-
+/* ===== 共通 ===== */
 function log(t){
   document.getElementById("log").textContent += t + "\n";
 }
+function setStatus(t){
+  document.getElementById("status").textContent = t;
+}
 
-async function loadZip(){
-  document.getElementById("log").textContent = "";
-  index = 0;
-  wavList = [];
-  outZip = new JSZip();
+let wavList = [];
+let index = 0;
+let converting = false;
+let autoTimer = null;
 
-  const file = document.getElementById("zip").files[0];
-  if(!file){
-    log("❌ zipが選択されていません");
-    return;
+let audioCtx = null;
+let dest = null;
+let recorder = null;
+let chunks = null;
+
+const outZip = new JSZip();
+
+/* ===== Audio 初期化 ===== */
+async function initAudio(){
+  if(audioCtx) return;
+
+  audioCtx = new AudioContext();
+  await audioCtx.resume();
+
+  dest = audioCtx.createMediaStreamDestination();
+  recorder = new MediaRecorder(dest.stream, { mimeType:"audio/ogg" });
+  recorder.ondataavailable = e => chunks.push(e.data);
+}
+
+/* ===== wav → ogg（超安定） ===== */
+async function wavToOgg(blob){
+  await initAudio();
+
+  const buf = await blob.arrayBuffer();
+  const buffer = await audioCtx.decodeAudioData(buf);
+
+  const src = audioCtx.createBufferSource();
+  src.buffer = buffer;
+  src.connect(audioCtx.destination); // ★ 無音防止
+  src.connect(dest);
+
+  chunks = [];
+  recorder.start();
+  src.start();
+
+  await new Promise(r => src.onended = r);
+  recorder.stop();
+  await new Promise(r => recorder.onstop = r);
+
+  src.disconnect();
+
+  return new Blob(chunks, { type:"audio/ogg" });
+}
+
+/* ===== 1ファイル変換 ===== */
+async function convertNext(){
+  if(converting) return;
+  if(index >= wavList.length) return;
+
+  converting = true;
+  convertBtn.disabled = true;
+
+  const item = wavList[index];
+  log(`変換中: ${item.name}`);
+
+  try {
+    const wav = await item.file.async("blob");
+    const ogg = await wavToOgg(wav);
+    outZip.file(item.name.replace(".wav",".ogg"), ogg);
+
+    index++;
+    updateStatus();
+
+    if(index === wavList.length){
+      log("🎉 全ファイル変換完了！");
+      await downloadZip();
+    }
+
+  } catch(e){
+    log("❌ エラー: " + e);
   }
 
-  const zip = await JSZip.loadAsync(file);
+  converting = false;
+  convertBtn.disabled = false;
+}
+
+/* ===== 状態表示 ===== */
+function updateStatus(){
+  setStatus(`🚦 残り ${wavList.length - index} / ${wavList.length}`);
+}
+
+/* ===== zipダウンロード ===== */
+async function downloadZip(){
+  setStatus("📦 zip生成中…");
+  const blob = await outZip.generateAsync({ type:"blob" });
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "SKRC_ogg_converted.zip";
+  a.click();
+
+  setStatus("✅ ダウンロード完了！");
+}
+
+/* ===== zip読込 ===== */
+document.getElementById("zip").addEventListener("change", async e => {
+  wavList = [];
+  index = 0;
+  document.getElementById("log").textContent = "";
+
+  const zip = await JSZip.loadAsync(e.target.files[0]);
 
   for(const name of Object.keys(zip.files)){
     if(name.endsWith(".wav")){
@@ -78,74 +172,26 @@ async function loadZip(){
   }
 
   log(`✅ ${wavList.length} 個の wav を読み込みました`);
-  updateProgress();
-  document.getElementById("convertBtn").disabled = false;
-}
+  updateStatus();
+});
 
-async function wavToOgg(blob){
-  if(!audioCtx){
-    audioCtx = new AudioContext();
-    await audioCtx.resume();
-  }
+/* ===== ボタン操作 ===== */
+const convertBtn = document.getElementById("convertBtn");
 
-  const buf = await blob.arrayBuffer();
-  const buffer = await audioCtx.decodeAudioData(buf);
+convertBtn.addEventListener("click", convertNext);
 
-  const dest = audioCtx.createMediaStreamDestination();
-  const src = audioCtx.createBufferSource();
-  src.buffer = buffer;
-  src.connect(dest);
-  src.connect(audioCtx.destination);
+// 長押し＝自動変換
+convertBtn.addEventListener("mousedown", () => {
+  autoTimer = setInterval(() => {
+    if(index < wavList.length){
+      convertNext();
+    }
+  }, 800); // ★ 間隔（安全）
+});
 
-  const recorder = new MediaRecorder(dest.stream, { mimeType:"audio/ogg" });
-  const chunks = [];
-
-  recorder.ondataavailable = e => chunks.push(e.data);
-
-  recorder.start();
-  src.start();
-
-  await new Promise(r => src.onended = r);
-  recorder.stop();
-  await new Promise(r => recorder.onstop = r);
-
-  return new Blob(chunks, { type:"audio/ogg" });
-}
-
-async function convertNext(){
-  if(index >= wavList.length){
-    return;
-  }
-
-  const item = wavList[index];
-  log(`変換中: ${item.name}`);
-
-  const wavBlob = await item.file.async("blob");
-  const oggBlob = await wavToOgg(wavBlob);
-
-  outZip.file(item.name.replace(".wav",".ogg"), oggBlob);
-
-  index++;
-  updateProgress();
-
-  if(index === wavList.length){
-    log("🎉 全て変換完了！");
-    downloadZip();
-  }
-}
-
-function updateProgress(){
-  document.getElementById("progress").textContent =
-    `進捗: ${index} / ${wavList.length}`;
-}
-
-async function downloadZip(){
-  const blob = await outZip.generateAsync({ type:"blob" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "SKRC_ogg_converted.zip";
-  a.click();
-}
+document.addEventListener("mouseup", () => {
+  clearInterval(autoTimer);
+});
 </script>
 </body>
 </html>
