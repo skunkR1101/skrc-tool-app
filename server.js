@@ -10,24 +10,20 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // フォルダ準備
-const dirs = ["uploads", "work", "output"];
+const dirs = ["uploads", "work"];
 dirs.forEach(d => {
   if (!fs.existsSync(d)) fs.mkdirSync(d);
 });
 
-// static（index.html用）
+// static
 app.use(express.static("public"));
 
 // upload設定
 const upload = multer({ dest: "uploads/" });
 
-/**
- * wav → ogg 変換処理
- */
 app.post("/convert", upload.single("zip"), async (req, res) => {
   const zipPath = req.file.path;
   const workDir = `work/${Date.now()}`;
-  const outZip = `output/result_${Date.now()}.zip`;
 
   fs.mkdirSync(workDir);
 
@@ -58,24 +54,28 @@ app.post("/convert", upload.single("zip"), async (req, res) => {
       execSync(`ffmpeg -y -i "${wav}" -qscale:a 5 "${ogg}"`);
     });
 
-    // zip作成
-    const output = fs.createWriteStream(outZip);
-    const archive = archiver("zip");
-    archive.pipe(output);
+    // ===== ZIPを直接レスポンスに流す =====
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=SKRC_ogg_converted.zip"
+    );
+
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    archive.pipe(res);
 
     wavFiles.forEach(wav => {
       const ogg = wav.replace(/\.wav$/i, ".ogg");
       archive.file(ogg, { name: path.basename(ogg) });
     });
 
-    await archive.finalize();
-
-    // ダウンロード
-    res.download(outZip, "SKRC_ogg_converted.zip");
+    await archive.finalize(); // ← これで100%完成ZIPが流れる
 
   } catch (e) {
     console.error(e);
-    res.status(500).send("変換エラー");
+    if (!res.headersSent) {
+      res.status(500).send("変換エラー");
+    }
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
     fs.unlinkSync(zipPath);
