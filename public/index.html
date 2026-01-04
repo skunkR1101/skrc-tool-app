@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>SKRC wav → ogg 変換ツール</title>
+
+<style>
+body {
+  background:#111;
+  color:#eee;
+  font-family:sans-serif;
+  padding:30px;
+}
+h2 { margin-bottom:10px; }
+input, button {
+  margin-top:10px;
+  font-size:16px;
+}
+button {
+  padding:8px 20px;
+}
+#log {
+  margin-top:20px;
+  white-space:pre-line;
+  font-size:14px;
+}
+</style>
+</head>
+
+<body>
+<h2>SKRC wav → ogg 一括変換ツール</h2>
+
+<p>① wavが入ったzipファイルを選択：</p>
+<input type="file" id="zip" accept=".zip">
+
+<br>
+<button onclick="start()">② 変換開始</button>
+
+<div id="log"></div>
+
+<script>
+function log(t){
+  document.getElementById("log").textContent += t + "\n";
+}
+
+async function start(){
+  document.getElementById("log").textContent = "";
+
+  const file = document.getElementById("zip").files[0];
+  if(!file){
+    log("❌ zipファイルを選択してください");
+    return;
+  }
+
+  log("🚄 サーバーに送信中…");
+
+  const form = new FormData();
+  form.append("zip", file);
+
+  const res = await fetch("/convert", {
+    method: "POST",
+    body: form
+  });
+
+  if(!res.ok){
+    log("❌ 変換に失敗しました");
+    return;
+  }
+
+  log("📦 zip生成完了！ダウンロード開始…");
+
+  const blob = await res.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "SKRC_ogg_converted.zip";
+  a.click();
+
+  log("✅ 完了！！");
+}
+</script>
+</body>
+</html>
